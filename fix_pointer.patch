@@ -1,0 +1,10 @@
+--- v3.html
++++ v3.html
+@@ -407,7 +407,7 @@
+     // Always visible if edit mode is true
+     let visible = editMode || (!inGame && sx > -300 && sx < 850 && sy > -250 && sy < 650);
+     el.style.opacity = visible ? (editMode ? '0.8' : '1') : '0';
+-    el.style.pointerEvents = visible ? (editMode ? 'none' : 'auto') : 'none';
++    el.style.pointerEvents = visible ? 'auto' : 'none';
+     el.style.transform = `translate(${sx}px, ${sy}px)`;
+   });

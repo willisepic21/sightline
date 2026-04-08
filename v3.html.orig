@@ -137,8 +137,7 @@
 
   <div id="cursor-ui">
     <span style="font-size:11px;font-weight:900;color:#7f8c8d;margin-right:4px;">CURSOR</span>
-    <div class="cursor-btn active" onclick="setCursor('crosshair',this)">➕</div>
-    <div class="cursor-btn" onclick="setCursor('🎾',this)">🎾</div>
+    <div class="cursor-btn active" onclick="setCursor('🎾',this)">🎾</div>
     <div class="cursor-btn" onclick="setCursor('🏀',this)">🏀</div>
     <div class="cursor-btn" onclick="setCursor('⚽',this)">⚽</div>
     <div class="cursor-btn" onclick="setCursor('🏑',this)">🏑</div>
@@ -190,7 +189,6 @@ document.addEventListener('mousedown', e => {
   if (!editMode) return;
   const bb = e.target.closest('.billboard');
   if (bb) {
-    e.preventDefault();
     draggedBB = bb;
     const rect = bb.getBoundingClientRect();
     dragOffsetX = e.clientX - rect.left;
@@ -207,7 +205,7 @@ document.addEventListener('mousemove', e => {
   // Convert back to absolute World Coordinates
   let wx = screenX + camera.x;
   let wy = screenY + camera.y;
-  
+
   draggedBB.setAttribute('data-wx', wx);
   draggedBB.setAttribute('data-wy', wy);
 });
@@ -236,13 +234,13 @@ function exportMap() {
     bb.style.opacity = '1';
     bb.classList.remove('editing');
   });
-  
+
   // 2. Uncheck the edit box for the exported file
   document.getElementById('edit-mode-toggle').checked = false;
 
   // 3. Grab the full HTML
   let htmlContent = "<!DOCTYPE html>\n<html lang=\"en\">\n" + document.documentElement.innerHTML + "\n</html>";
-  
+
   // 4. Create Blob and Download
   let blob = new Blob([htmlContent], {type: "text/html"});
   let url = URL.createObjectURL(blob);
@@ -252,7 +250,7 @@ function exportMap() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  
+
   // 5. Restore edit state
   if(editMode) {
     document.querySelectorAll('.billboard').forEach(bb => bb.classList.add('editing'));
@@ -262,16 +260,12 @@ function exportMap() {
 
 // ─── CURSOR ──────────────────────────────────────────────
 function setCursor(emoji, btn) {
-  if (emoji === 'crosshair') {
-    document.getElementById('game-container').style.cursor = 'crosshair';
-  } else {
-    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><text y='26' style='font-size:24px'>${emoji}</text></svg>`;
-    document.getElementById('game-container').style.cursor = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 16 16, auto`;
-  }
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><text y='26' style='font-size:24px'>${emoji}</text></svg>`;
+  document.getElementById('game-container').style.cursor = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 16 16, auto`;
   document.querySelectorAll('.cursor-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
 }
-setCursor('crosshair', document.querySelector('.cursor-btn.active'));
+setCursor('🎾', document.querySelector('.cursor-btn.active'));
 
 // ─── CANVAS SETUP ────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
@@ -430,7 +424,7 @@ function shootBasketball() {
 }
 function kickSoccer() {
   const dx = mgSoccer.aimX - mgSoccer.ballX, dy = mgSoccer.aimY - mgSoccer.ballY; const dist = Math.hypot(dx,dy);
-  mgSoccer.bvx = (dx/dist)*16; mgSoccer.bvy = (dy/dist)*16; mgSoccer.kicked = true; mgSoccer.keepX = 165 + Math.random()*(470-90); 
+  mgSoccer.bvx = (dx/dist)*16; mgSoccer.bvy = (dy/dist)*16; mgSoccer.kicked = true; mgSoccer.keepX = 165 + Math.random()*(470-90);
 }
 function shootFH() {
   const p = mgFH.puck; const dx = mgFH.aimX - p.x, dy = mgFH.aimY - p.y; const dist = Math.hypot(dx,dy);
@@ -648,18 +642,18 @@ function render() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   const inGame = ['PICKLEBALL','BASKETBALL','SOCCER','LACROSSE','FIELDHOCKEY','MODAL'].includes(gameState);
-  
+
   // Render HTML Billboards via data-wx and data-wy attributes
   document.querySelectorAll('.billboard').forEach(el => {
     const wx = parseFloat(el.getAttribute('data-wx'));
     const wy = parseFloat(el.getAttribute('data-wy'));
     const sx = wx - camera.x;
     const sy = wy - camera.y;
-    
+
     // Always visible if edit mode is true
     let visible = editMode || (!inGame && sx > -300 && sx < 850 && sy > -250 && sy < 650);
     el.style.opacity = visible ? (editMode ? '0.8' : '1') : '0';
-    el.style.pointerEvents = visible ? 'auto' : 'none';
+    el.style.pointerEvents = visible ? (editMode ? 'none' : 'auto') : 'none';
     el.style.transform = `translate(${sx}px, ${sy}px)`;
   });
 
