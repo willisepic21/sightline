@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CourtVision — Player Tracking</title>
+  <title>SightLine — Player Tracking</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600&display=swap');
     :root {
@@ -141,7 +141,7 @@
 <body>
 
 <header id="topbar">
-  <div class="logo">Court<span>Vision</span></div>
+  <div class="logo">Sight<span>Line</span></div>
   <div class="divider"></div>
   <span id="phase-label">Upload</span>
   <div style="margin-left:auto;display:flex;gap:10px" id="topbar-actions"></div>
@@ -366,7 +366,16 @@
     if (!p) return;
     document.getElementById('stats-content').innerHTML = `
       <div id="selected-header">
-        <div class="swatch" style="background:${p.color}"></div>
+        <div class="swatch" id="player-photo-${p.id}" 
+        style="background:${p.color}; cursor:pointer; overflow:hidden; border-radius:6px;"
+        onclick="document.getElementById('photo-input-${p.id}').click()"
+        title="Click to upload player photo">
+${p.photo ? `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover;">` : `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;padding:6px;opacity:0.4">
+  <circle cx="24" cy="16" r="8" fill="currentColor"/>
+  <path d="M8 40c0-8.837 7.163-16 16-16s16 7.163 16 16" fill="currentColor"/>
+</svg>`}    </div>
+<input type="file" id="photo-input-${p.id}" accept="image/*" style="display:none"
+  onchange="assignPhoto('${p.id}', this)"/>
         <div>
           <div class="player-name">Player ${p.id}</div>
           <div class="player-id">Track ID #${p.id}</div>
@@ -391,6 +400,15 @@
       document.getElementById('topbar-actions').innerHTML =
         `<button class="btn" onclick="location.reload()">New Video</button>`;
     }
+  }
+
+    // ── PHOTO ASSIGNMENT ──────────────────────────────────────────
+  function assignPhoto(id, input) {
+    const file = input.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    trackData.players[id].photo = url;
+    renderStats(trackData.players[id]);
   }
 </script>
 </body>
