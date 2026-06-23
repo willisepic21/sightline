@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CourtVision — Player Tracking</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600&display=swap');
+    :root {
+      --bg: #0a0c0f; --surface: #111418; --border: #1e2329;
+      --accent: #00e5a0; --accent-dim: rgba(0,229,160,0.12);
+      --warn: #ff6b35; --text: #e8eaed; --muted: #6b7280;
+      --mono: 'IBM Plex Mono', monospace; --sans: 'Inter', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text); font-family: var(--sans);
+      font-size: 14px; height: 100vh; overflow: hidden;
+      display: grid; grid-template-rows: 48px 1fr;
+    }
+    #topbar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 24px; gap: 24px;
+    }
+    .logo { font-family: var(--mono); font-weight: 600; font-size: 15px; color: var(--accent); }
+    .logo span { color: var(--text); }
+    .divider { width: 1px; height: 20px; background: var(--border); }
+    #phase-label { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* UPLOAD */
+    #screen-upload {
+      display: flex; align-items: center; justify-content: center;
+      height: 100%; background: var(--bg);
+    }
+    #drop-zone {
+      width: 480px; border: 2px dashed var(--border); border-radius: 16px;
+      padding: 56px 40px; text-align: center; cursor: pointer; transition: all 0.2s;
+    }
+    #drop-zone:hover, #drop-zone.over { border-color: var(--accent); background: var(--accent-dim); }
+    #drop-zone .icon { font-size: 48px; margin-bottom: 16px; }
+    #drop-zone h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    #drop-zone p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+    #file-input { display: none; }
+
+    /* PROCESSING */
+    #screen-processing {
+      display: none; align-items: center; justify-content: center;
+      height: 100%; flex-direction: column; gap: 24px;
+    }
+    #screen-processing h2 { font-size: 20px; font-weight: 600; }
+    #screen-processing p { color: var(--muted); font-size: 13px; }
+    .progress-wrap {
+      width: 360px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 100px; height: 6px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: var(--accent); border-radius: 100px;
+      transition: width 0.5s ease; width: 0%;
+    }
+    #pct-label { font-family: var(--mono); font-size: 24px; font-weight: 600; color: var(--accent); }
+
+    /* PLAYER */
+    #screen-player {
+      display: none; grid-template-columns: 1fr 340px; height: 100%;
+    }
+    #video-panel { position: relative; background: #000; overflow: hidden; }
+    #tracked-video { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; }
+
+    /* Play/Pause button */
+    #play-btn {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.65);
+      border: 1.5px solid var(--accent);
+      color: var(--accent);
+      font-size: 18px;
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.15s;
+      z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #play-btn:hover { background: var(--accent); color: #000; }
+
+    #sidebar {
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .sidebar-section { border-bottom: 1px solid var(--border); padding: 16px; }
+    .sidebar-section h3 {
+      font-family: var(--mono); font-size: 10px; font-weight: 600;
+      letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
+    }
+    #player-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+    .player-chip {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+      border-radius: 6px; border: 1px solid var(--border); cursor: pointer; transition: all 0.15s;
+    }
+    .player-chip:hover, .player-chip.selected { border-color: var(--accent); background: var(--accent-dim); }
+    .player-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .player-chip .name { font-size: 13px; font-weight: 500; flex: 1; }
+    .player-chip .spd { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+    #stats-panel { flex: 1; overflow-y: auto; padding: 16px; }
+    #stats-panel h3 {
+      font-family: var(--mono); font-size: 10px; font-weight: 600;
+      letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
+    }
+    #selected-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .swatch { width: 32px; height: 32px; border-radius: 6px; }
+    .player-name { font-size: 16px; font-weight: 600; }
+    .player-id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 10px; }
+    .stat-card .lbl { font-family: var(--mono); font-size: 9px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .stat-card .val { font-family: var(--mono); font-size: 20px; font-weight: 600; color: var(--accent); line-height: 1; }
+    .stat-card .unit { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    #no-selection { color: var(--muted); font-size: 13px; text-align: center; padding: 32px 0; line-height: 1.6; }
+
+    .btn {
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+      letter-spacing: 0.5px; text-transform: uppercase; padding: 8px 16px;
+      border-radius: 4px; border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; transition: all 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<header id="topbar">
+  <div class="logo">Court<span>Vision</span></div>
+  <div class="divider"></div>
+  <span id="phase-label">Upload</span>
+  <div style="margin-left:auto;display:flex;gap:10px" id="topbar-actions"></div>
+</header>
+
+<!-- UPLOAD -->
+<div id="screen-upload">
+  <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <div class="icon">🎬</div>
+    <h2>Drop your video here</h2>
+    <p>Upload a match video and CourtVision will track every player on the pitch.<br>MP4, MOV, AVI supported.</p>
+    <input type="file" id="file-input" accept="video/*"/>
+  </div>
+</div>
+
+<!-- PROCESSING -->
+<div id="screen-processing">
+  <div id="pct-label">0%</div>
+  <h2>Processing video</h2>
+  <p>YOLOv8 is tracking players across every frame — this takes a few minutes.</p>
+  <div class="progress-wrap"><div class="progress-fill" id="progress-fill"></div></div>
+  <p id="proc-status" style="font-family:var(--mono);font-size:11px">Initialising...</p>
+</div>
+
+<!-- PLAYER -->
+<div id="screen-player">
+  <div id="video-panel">
+    <video id="tracked-video"></video>
+    <canvas id="overlay-canvas"></canvas>
+    <button id="play-btn" onclick="togglePlay()">▶</button>
+  </div>
+  <aside id="sidebar">
+    <div class="sidebar-section">
+      <h3>Players Detected</h3>
+      <div id="player-list"></div>
+    </div>
+    <div id="stats-panel">
+      <h3>Player Stats</h3>
+      <div id="stats-content">
+        <div id="no-selection">Click a player on the video<br>or select from the list.</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+  const BACKEND = 'http://127.0.0.1:8000';
+  let jobId = null, trackData = null, selectedId = null, pollTimer = null;
+
+  const video  = document.getElementById('tracked-video');
+  const canvas = document.getElementById('overlay-canvas');
+  const ctx    = canvas.getContext('2d');
+
+  // ── FILE INPUT ────────────────────────────────────────────────
+  document.getElementById('file-input').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) uploadFile(f);
+  });
+  const dz = document.getElementById('drop-zone');
+  dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('video/')) uploadFile(f);
+  });
+
+  // ── UPLOAD ────────────────────────────────────────────────────
+  async function uploadFile(file) {
+    showScreen('processing');
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res  = await fetch(`${BACKEND}/process`, { method: 'POST', body: fd });
+      const data = await res.json();
+      jobId = data.job_id;
+      pollTimer = setInterval(pollStatus, 1000);
+    } catch {
+      document.getElementById('proc-status').textContent = 'Error — is the backend running?';
+    }
+  }
+
+  async function pollStatus() {
+    try {
+      const res  = await fetch(`${BACKEND}/status/${jobId}`);
+      const data = await res.json();
+      const pct  = data.progress || 0;
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('pct-label').textContent = pct + '%';
+      document.getElementById('proc-status').textContent = `${pct}% complete`;
+      if (data.status === 'done') {
+        clearInterval(pollTimer);
+        loadResults();
+      } else if (data.status === 'error') {
+        clearInterval(pollTimer);
+        document.getElementById('proc-status').textContent = 'Processing failed.';
+      }
+    } catch {}
+  }
+
+  // ── LOAD RESULTS ─────────────────────────────────────────────
+  async function loadResults() {
+    const dataRes = await fetch(`${BACKEND}/data/${jobId}`);
+    trackData = await dataRes.json();
+
+    const videoRes = await fetch(`${BACKEND}/download/${jobId}`);
+    const blob = await videoRes.blob();
+    video.src = URL.createObjectURL(blob);
+    video.load();
+    video.addEventListener('canplay', () => video.play(), { once: true });
+
+    buildPlayerList();
+    showScreen('player');
+    resizeCanvas();
+    video.addEventListener('timeupdate', drawFrame);
+  }
+
+  // ── PLAY / PAUSE ──────────────────────────────────────────────
+  function togglePlay() {
+    if (video.paused) video.play();
+    else video.pause();
+  }
+
+  video.addEventListener('play',  () => document.getElementById('play-btn').textContent = '⏸');
+  video.addEventListener('pause', () => document.getElementById('play-btn').textContent = '▶');
+  video.addEventListener('ended', () => document.getElementById('play-btn').textContent = '▶');
+
+  // ── CANVAS ───────────────────────────────────────────────────
+  function resizeCanvas() {
+    canvas.width  = video.clientWidth  || video.offsetWidth;
+    canvas.height = video.clientHeight || video.offsetHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  video.addEventListener('loadedmetadata', resizeCanvas);
+
+  function getVideoRect() {
+    const cw = canvas.width, ch = canvas.height;
+    const vw = video.videoWidth  || trackData?.frame_w || 1920;
+    const vh = video.videoHeight || trackData?.frame_h || 1080;
+    const scale = Math.min(cw / vw, ch / vh);
+    const rw = vw * scale, rh = vh * scale;
+    return { x: (cw-rw)/2, y: (ch-rh)/2, w: rw, h: rh, sw: rw/vw, sh: rh/vh };
+  }
+
+  function drawFrame() {
+    if (!trackData) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const fps   = trackData.fps;
+    const frame = Math.floor(video.currentTime * fps);
+    const vr    = getVideoRect();
+
+    Object.values(trackData.players).forEach(p => {
+      const fd = p.frames.find(f => f.frame === frame);
+      if (!fd) return;
+      const [x1, y1, x2, y2] = fd.bbox;
+      const sx = vr.x + x1 * vr.sw;
+      const sy = vr.y + y1 * vr.sh;
+      const sw = (x2 - x1) * vr.sw;
+      const sh = (y2 - y1) * vr.sh;
+      const sel = String(p.id) === selectedId;
+
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth   = sel ? 3 : 1.5;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur  = sel ? 14 : 5;
+      ctx.strokeRect(sx, sy, sw, sh);
+      ctx.shadowBlur  = 0;
+
+      const label = `#${p.id}`;
+      ctx.font = '600 11px IBM Plex Mono, monospace';
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(sx, sy - 18, tw + 10, 18);
+      ctx.fillStyle = '#000';
+      ctx.fillText(label, sx + 5, sy - 5);
+    });
+  }
+
+  // ── CLICK TO SELECT ───────────────────────────────────────────
+  canvas.addEventListener('click', e => {
+    if (!trackData) return;
+    const rect  = canvas.getBoundingClientRect();
+    const mx    = e.clientX - rect.left;
+    const my    = e.clientY - rect.top;
+    const frame = Math.floor(video.currentTime * trackData.fps);
+    const vr    = getVideoRect();
+
+    let closest = null, minDist = Infinity;
+    Object.values(trackData.players).forEach(p => {
+      const fd = p.frames.find(f => f.frame === frame);
+      if (!fd) return;
+      const [x1, y1, x2, y2] = fd.bbox;
+      const cx = vr.x + ((x1+x2)/2) * vr.sw;
+      const cy = vr.y + ((y1+y2)/2) * vr.sh;
+      const d  = Math.sqrt((mx-cx)**2 + (my-cy)**2);
+      if (d < minDist) { minDist = d; closest = String(p.id); }
+    });
+    if (closest && minDist < 80) selectPlayer(closest);
+  });
+
+  // ── PLAYER LIST ───────────────────────────────────────────────
+  function buildPlayerList() {
+    document.getElementById('player-list').innerHTML =
+      Object.values(trackData.players).map(p => `
+        <div class="player-chip" id="chip-${p.id}" onclick="selectPlayer('${p.id}')">
+          <div class="player-dot" style="background:${p.color}"></div>
+          <span class="name">Player ${p.id}</span>
+          <span class="spd">${p.stats.max_speed} km/h</span>
+        </div>`).join('');
+  }
+
+  function selectPlayer(id) {
+    selectedId = id;
+    document.querySelectorAll('.player-chip').forEach(c => c.classList.remove('selected'));
+    const chip = document.getElementById(`chip-${id}`);
+    if (chip) chip.classList.add('selected');
+    renderStats(trackData.players[id]);
+    drawFrame();
+  }
+
+  function renderStats(p) {
+    if (!p) return;
+    document.getElementById('stats-content').innerHTML = `
+      <div id="selected-header">
+        <div class="swatch" style="background:${p.color}"></div>
+        <div>
+          <div class="player-name">Player ${p.id}</div>
+          <div class="player-id">Track ID #${p.id}</div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="lbl">Max Speed</div><div class="val">${p.stats.max_speed}</div><div class="unit">km/h</div></div>
+        <div class="stat-card"><div class="lbl">Distance</div><div class="val">${p.stats.distance}</div><div class="unit">metres</div></div>
+        <div class="stat-card"><div class="lbl">Time on Pitch</div><div class="val">${p.stats.time_on_pitch}</div><div class="unit">seconds</div></div>
+        <div class="stat-card"><div class="lbl">Detections</div><div class="val">${p.stats.detections}</div><div class="unit">frames</div></div>
+      </div>`;
+  }
+
+  // ── SCREENS ───────────────────────────────────────────────────
+  function showScreen(name) {
+    document.getElementById('screen-upload').style.display     = name==='upload'     ? 'flex' : 'none';
+    document.getElementById('screen-processing').style.display = name==='processing' ? 'flex' : 'none';
+    document.getElementById('screen-player').style.display     = name==='player'     ? 'grid' : 'none';
+    const labels = { upload: 'Upload', processing: 'Processing', player: 'Live View' };
+    document.getElementById('phase-label').textContent = labels[name];
+    if (name === 'player') {
+      document.getElementById('topbar-actions').innerHTML =
+        `<button class="btn" onclick="location.reload()">New Video</button>`;
+    }
+  }
+</script>
+</body>
+</html>
